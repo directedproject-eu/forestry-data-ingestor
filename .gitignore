@@ -1,3 +1,5 @@
 forestery-data-ingestor/venv/
 .idea/
 forestery-data-ingestor/data
+forestery-data-ingestor/.env
+.venv

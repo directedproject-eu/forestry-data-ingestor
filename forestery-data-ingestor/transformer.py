@@ -1,18 +1,14 @@
-# transformer.py
 import pandas as pd
 import os
 import json
 
 def clean_and_simplify_forestry_data(df, old_cols, new_cols):
 
-    # Clean header names (remove \n)
     df.columns = df.columns.str.replace('\n', ' in ')
 
-    # Rename columns
     rename_map = dict(zip(old_cols, new_cols))
     df = df.rename(columns=rename_map)
 
-    # Filter columns
     df = df[df.columns.intersection(new_cols)].copy()
 
     # Format time
