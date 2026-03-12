@@ -4,11 +4,10 @@ import os
 import sys
 from datetime import datetime
 
-import requests
 import pandas as pd
-from s3fs import S3FileSystem
-
+import requests
 import transformer
+from s3fs import S3FileSystem
 
 # Necessary to avoid writing checksums into the COGs when uploading them to the bucket (cf. https://github.com/boto/boto3/issues/4435)
 os.environ["AWS_REQUEST_CHECKSUM_CALCULATION"] = "when_required"
@@ -27,7 +26,7 @@ def get_data(url: str):
     response = requests.get(url)
     if response.status_code == 200:
         virtual_file = io.BytesIO(response.content)
-        return pd.read_excel(virtual_file, engine='openpyxl', sheet_name=None)
+        return pd.read_excel(virtual_file, engine="openpyxl", sheet_name=None)
     else:
         logger.error(f"Failed to download. Status code: {response.status_code}")
 
@@ -41,7 +40,9 @@ def is_valid_format(date_str: str):
         return False
 
 
-def download_from_bucket(local_file: str, bucket_file: str, endpoint_url: str, key: str, secret: str):
+def download_from_bucket(
+    local_file: str, bucket_file: str, endpoint_url: str, key: str, secret: str
+):
     logger.info(f"Try to download {bucket_file} to {local_file}.")
     s3 = S3FileSystem(endpoint_url=endpoint_url, key=key, secret=secret)
     try:
@@ -51,7 +52,9 @@ def download_from_bucket(local_file: str, bucket_file: str, endpoint_url: str, k
         logger.info("Download failed.")
 
 
-def upload_to_bucket(local_file: str, bucket_file: str, endpoint_url: str, key: str, secret: str):
+def upload_to_bucket(
+    local_file: str, bucket_file: str, endpoint_url: str, key: str, secret: str
+):
     logger.info(f"Try to upload {local_file} to {bucket_file}.")
     s3 = S3FileSystem(endpoint_url=endpoint_url, key=key, secret=secret)
     with open(local_file, "rb") as f:
@@ -62,7 +65,9 @@ def upload_to_bucket(local_file: str, bucket_file: str, endpoint_url: str, key: 
 
 if __name__ == "__main__":
     # Configurable parameters
-    bucket_endpoint = os.getenv("BUCKET_ENDPOINT", "https://obs.eu-de.otc.t-systems.com")
+    bucket_endpoint = os.getenv(
+        "BUCKET_ENDPOINT", "https://obs.eu-de.otc.t-systems.com"
+    )
     bucket_name = os.getenv("BUCKET_NAME")
     bucket_base_path = os.getenv("BUCKET_BASE_PATH", "data/forestry")
     bucket_key = os.getenv("BUCKET_KEY")
@@ -79,9 +84,24 @@ if __name__ == "__main__":
         logger.error(msg)
         raise ValueError(msg)
     url = f"https://met.boreas.hu/bakonyerdo/xls_tables/{source_file_base}-{date}.xlsx"
-    old_col_names = ["Mérés ideje", "T2m in °C", "Szél in m/s", "VWC1 in %", "VWC2 in %", "VWC3 in %",  "VWC4 in %"]
-    new_col_names = ["time", "temperature", "wind_speed", "soil_moisture_10cm", "soil_moisture_25cm",
-                     "soil_moisture_50cm", "soil_moisture_70cm"]
+    old_col_names = [
+        "Mérés ideje",
+        "T2m in °C",
+        "Szél in m/s",
+        "VWC1 in %",
+        "VWC2 in %",
+        "VWC3 in %",
+        "VWC4 in %",
+    ]
+    new_col_names = [
+        "time",
+        "temperature",
+        "wind_speed",
+        "soil_moisture_10cm",
+        "soil_moisture_25cm",
+        "soil_moisture_50cm",
+        "soil_moisture_70cm",
+    ]
 
     df = get_data(url=url)
     stations = list(df.keys())
@@ -98,8 +118,20 @@ if __name__ == "__main__":
         for param in new_col_names[1:]:
             local_file_name = os.path.join(local_folder_name, f"{param}.json")
             bucket_file_name = f"{bucket_path}/{param}.json"
-            download_from_bucket(local_file_name, bucket_file_name, bucket_endpoint, bucket_key, bucket_secret)
+            download_from_bucket(
+                local_file_name,
+                bucket_file_name,
+                bucket_endpoint,
+                bucket_key,
+                bucket_secret,
+            )
             json_data = transformer.to_json_structure(clean_df[["time", param]])
             transformer.append_and_save_json(json_data, local_file_name)
             if upload:
-                upload_to_bucket(local_file_name, bucket_file_name, bucket_endpoint, bucket_key, bucket_secret)
+                upload_to_bucket(
+                    local_file_name,
+                    bucket_file_name,
+                    bucket_endpoint,
+                    bucket_key,
+                    bucket_secret,
+                )
