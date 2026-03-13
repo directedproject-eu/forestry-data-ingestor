@@ -44,11 +44,13 @@ def download_from_bucket(
     local_file: str, bucket_file: str, endpoint_url: str, key: str, secret: str
 ):
     logger.info(f"Try to download {bucket_file} to {local_file}.")
-    s3 = S3FileSystem(endpoint_url=endpoint_url, key=key, secret=secret)
     try:
+        s3 = S3FileSystem(endpoint_url=endpoint_url, key=key, secret=secret)
         s3.get(bucket_file, local_file)
         logger.info("Download succeeded.")
     except FileNotFoundError:
+        logger.info("Download failed.")
+    except Exception:
         logger.info("Download failed.")
 
 
