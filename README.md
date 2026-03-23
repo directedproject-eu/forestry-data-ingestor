@@ -24,3 +24,7 @@ Run the Docker image:
 ```shell
  docker run -e BUCKET_NAME="" -e BUCKET_KEY="" -e BUCKET_SECRET="" directed/forestry-data-ingestor:latest
 ```
+
+Be default, the script ingests data for the current month. Different months can be configured with the "DATES" 
+environment parameter. Dates have to be provided in the format "YYYY-MM".
+Multiple dates have to be separated with a comma, e.g. "2025-12,2026-01,2026-02".
