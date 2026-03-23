@@ -2,7 +2,7 @@ import io
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
@@ -76,64 +76,80 @@ if __name__ == "__main__":
     bucket_secret = os.getenv("BUCKET_SECRET")
     upload = os.getenv("UPLOAD_TO_BUCKET", "true").lower() == "true"
     source_file_base = os.getenv("SOURCE_FILE_BASE", "Bakonyerd%c5%91")
-    year = os.getenv("YEAR", datetime.now().strftime("%Y"))
-    month = os.getenv("MONTH", datetime.now().strftime("%m"))
-    # Fixed parameters
-    local_base_folder = "data"
-    date = f"{year}-{month}"
-    if not is_valid_format(date):
-        msg = f"Invalid date format: '{date}'. The expected format is 'YYYY-MM' (e.g., '2026-02')."
+    now = datetime.now()
+    dates = (
+        os.getenv("DATES", now.strftime("%Y-%m")).replace(" ", "").split(",")
+    )  # date format: YYYY-MM
+    if not isinstance(dates, list):
+        msg = f"'dates' is of type {type(dates)} but should be a list"
         logger.error(msg)
         raise ValueError(msg)
-    url = f"https://met.boreas.hu/bakonyerdo/xls_tables/{source_file_base}-{date}.xlsx"
-    old_col_names = [
-        "Mérés ideje",
-        "T2m in °C",
-        "Szél in m/s",
-        "VWC1 in %",
-        "VWC2 in %",
-        "VWC3 in %",
-        "VWC4 in %",
-    ]
-    new_col_names = [
-        "time",
-        "temperature",
-        "wind_speed",
-        "soil_moisture_10cm",
-        "soil_moisture_25cm",
-        "soil_moisture_50cm",
-        "soil_moisture_70cm",
-    ]
+    # Avoid data gaps when the latest data is ingested and a new month begins
+    if (
+        len(dates) == 1
+        and dates[0] == now.strftime("%Y-%m")
+        and now.strftime("%d") == "01"
+    ):
+        dates.append((now - timedelta(days=1)).strftime("%Y-%m"))
+    # Fixed parameters
+    local_base_folder = "data"
 
-    df = get_data(url=url)
-    stations = list(df.keys())
-    for station in stations:
-        clean_df = transformer.clean_and_simplify_forestry_data(
-            df=df[station],
-            old_cols=old_col_names,
-            new_cols=new_col_names,
-        )
-        station_normalized = transformer.normalize_string(station)
-        local_folder_name = os.path.join(local_base_folder, station_normalized)
-        os.makedirs(local_folder_name, exist_ok=True)
-        bucket_path = f"{bucket_name}/{bucket_base_path}/{station_normalized}"
-        for param in new_col_names[1:]:
-            local_file_name = os.path.join(local_folder_name, f"{param}.json")
-            bucket_file_name = f"{bucket_path}/{param}.json"
-            download_from_bucket(
-                local_file_name,
-                bucket_file_name,
-                bucket_endpoint,
-                bucket_key,
-                bucket_secret,
+    for date in dates:
+        logger.info(f"Processing data for {date}")
+        if not is_valid_format(date):
+            msg = f"Invalid date format: '{date}'. The expected format is 'YYYY-MM' (e.g., '2026-02')."
+            logger.error(msg)
+            raise ValueError(msg)
+        url = f"https://met.boreas.hu/bakonyerdo/xls_tables/{source_file_base}-{date}.xlsx"
+        old_col_names = [
+            "Mérés ideje",
+            "T2m in °C",
+            "Szél in m/s",
+            "VWC1 in %",
+            "VWC2 in %",
+            "VWC3 in %",
+            "VWC4 in %",
+        ]
+        new_col_names = [
+            "time",
+            "temperature",
+            "wind_speed",
+            "soil_moisture_10cm",
+            "soil_moisture_25cm",
+            "soil_moisture_50cm",
+            "soil_moisture_70cm",
+        ]
+
+        df = get_data(url=url)
+        stations = list(df.keys())
+        for station in stations:
+            clean_df = transformer.clean_and_simplify_forestry_data(
+                df=df[station],
+                old_cols=old_col_names,
+                new_cols=new_col_names,
             )
-            json_data = transformer.to_json_structure(clean_df[["time", param]])
-            transformer.append_and_save_json(json_data, local_file_name)
-            if upload:
-                upload_to_bucket(
-                    local_file_name,
-                    bucket_file_name,
-                    bucket_endpoint,
-                    bucket_key,
-                    bucket_secret,
-                )
+            station_normalized = transformer.normalize_string(station)
+            local_folder_name = os.path.join(local_base_folder, station_normalized)
+            os.makedirs(local_folder_name, exist_ok=True)
+            bucket_path = f"{bucket_name}/{bucket_base_path}/{station_normalized}"
+            for param in new_col_names[1:]:
+                local_file_name = os.path.join(local_folder_name, f"{param}.json")
+                bucket_file_name = f"{bucket_path}/{param}.json"
+                if bucket_name and bucket_key and bucket_secret:
+                    download_from_bucket(
+                        local_file_name,
+                        bucket_file_name,
+                        bucket_endpoint,
+                        bucket_key,
+                        bucket_secret,
+                    )
+                json_data = transformer.to_json_structure(clean_df[["time", param]])
+                transformer.append_and_save_json(json_data, local_file_name)
+                if upload:
+                    upload_to_bucket(
+                        local_file_name,
+                        bucket_file_name,
+                        bucket_endpoint,
+                        bucket_key,
+                        bucket_secret,
+                    )
